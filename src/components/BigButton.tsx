@@ -12,6 +12,9 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Theme } from '@/theme';
 
+// Ancho reservado a la izquierda para el icono (mantiene el texto centrado)
+const ICON_SLOT = 44;
+
 interface BigButtonProps {
   label: string;
   sublabel?: string;
@@ -69,14 +72,15 @@ export const BigButton: React.FC<BigButtonProps> = ({
       {loading ? (
         <ActivityIndicator size="small" color={getTextColor()} />
       ) : (
-        <View style={styles.content}>
+        <View style={[styles.content, icon ? styles.contentWithIcon : null]}>
           {icon && (
-            <MaterialCommunityIcons
-              name={icon}
-              size={28}
-              color={getTextColor()}
-              style={styles.icon}
-            />
+            <View style={styles.iconSlot}>
+              <MaterialCommunityIcons
+                name={icon}
+                size={28}
+                color={getTextColor()}
+              />
+            </View>
           )}
           <View style={styles.textContainer}>
             <Text style={[styles.label, { color: getTextColor() }]}>{label}</Text>
@@ -116,11 +120,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
-  icon: {
-    marginRight: 10,
+  // Mantiene el texto centrado en el botón aunque haya icono a la izquierda
+  contentWithIcon: {
+    paddingRight: ICON_SLOT,
+  },
+  iconSlot: {
+    width: ICON_SLOT,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   textContainer: {
+    flex: 1,
     alignItems: 'center',
   },
   label: {

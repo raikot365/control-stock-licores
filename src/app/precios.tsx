@@ -15,43 +15,64 @@ import { BigButton } from '@/components/BigButton';
 import { Card } from '@/components/Card';
 import { PriceService } from '@/services/priceService';
 import { Theme } from '@/theme';
+import { formatMoney } from '@/utils/format';
+
+/** Deja sólo dígitos (los precios son enteros) */
+function onlyDigits(text: string): string {
+  return text.replace(/\D/g, '');
+}
+
+/** Agrupa miles con punto: "10000" -> "10.000" */
+function groupThousands(digits: string): string {
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
 
 export default function PreciosScreen() {
   const router = useRouter();
-  const [grandePrice, setGrandePrice] = useState(() => {
+
+  // Precios vigentes al abrir la pantalla (sólo como referencia)
+  const [currentPrices] = useState(() => {
     try {
-      return PriceService.getPrices().GRANDE.toString();
+      return PriceService.getPrices();
     } catch {
-      return '8000';
+      return { GRANDE: 8000, CHICA: 5000 };
     }
   });
-  const [chicaPrice, setChicaPrice] = useState(() => {
-    try {
-      return PriceService.getPrices().CHICA.toString();
-    } catch {
-      return '5000';
-    }
-  });
-  const [successMsg, setSuccessMsg] = useState(false);
+
+  const [grandeDigits, setGrandeDigits] = useState(() => String(currentPrices.GRANDE));
+  const [chicaDigits, setChicaDigits] = useState(() => String(currentPrices.CHICA));
+  const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSave = () => {
-    const grandeNum = parseFloat(grandePrice.replace(/\./g, ''));
-    const chicaNum = parseFloat(chicaPrice.replace(/\./g, ''));
+  const handleChange = (setter: (value: string) => void) => (text: string) => {
+    setter(onlyDigits(text).slice(0, 9));
+    setSuccessMsg('');
+    setErrorMsg('');
+  };
 
-    if (isNaN(grandeNum) || grandeNum <= 0) {
+  const handleSave = () => {
+    const grandeNum = Number(grandeDigits);
+    const chicaNum = Number(chicaDigits);
+
+    if (!grandeDigits || isNaN(grandeNum) || grandeNum <= 0) {
       setErrorMsg('Ingresá un precio válido para la botella grande');
       return;
     }
-    if (isNaN(chicaNum) || chicaNum <= 0) {
+    if (!chicaDigits || isNaN(chicaNum) || chicaNum <= 0) {
       setErrorMsg('Ingresá un precio válido para la botella chica');
+      return;
+    }
+
+    if (grandeNum === currentPrices.GRANDE && chicaNum === currentPrices.CHICA) {
+      setErrorMsg('');
+      setSuccessMsg('Los precios ya están actualizados.');
       return;
     }
 
     try {
       PriceService.updatePrices(grandeNum, chicaNum);
-      setSuccessMsg(true);
       setErrorMsg('');
+      setSuccessMsg('¡Precios actualizados con éxito!');
       setTimeout(() => {
         router.back();
       }, 1200);
@@ -65,7 +86,11 @@ export default function PreciosScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <Card style={styles.card}>
           <Text style={styles.title}>Precios Unitarios Vigentes</Text>
           <Text style={styles.subtitle}>
@@ -78,18 +103,20 @@ export default function PreciosScreen() {
               <MaterialCommunityIcons name="bottle-wine" size={28} color={Theme.colors.primary} />
               <Text style={styles.fieldLabel}>Botella Grande</Text>
             </View>
+            <Text style={styles.currentPrice}>
+              Precio actual: {formatMoney(currentPrices.GRANDE)}
+            </Text>
             <View style={styles.inputContainer}>
               <Text style={styles.currencyPrefix}>$</Text>
               <TextInput
                 style={styles.input}
-                keyboardType="numeric"
-                value={grandePrice}
-                onChangeText={(t) => {
-                  setGrandePrice(t);
-                  setSuccessMsg(false);
-                }}
-                placeholder="Ej: 8000"
+                keyboardType="number-pad"
+                value={groupThousands(grandeDigits)}
+                onChangeText={handleChange(setGrandeDigits)}
+                placeholder="Ej: 8.000"
                 placeholderTextColor="#999"
+                selectTextOnFocus
+                accessibilityLabel="Precio de botella grande"
               />
             </View>
           </View>
@@ -100,18 +127,20 @@ export default function PreciosScreen() {
               <MaterialCommunityIcons name="glass-cocktail" size={26} color={Theme.colors.primary} />
               <Text style={styles.fieldLabel}>Botella Chica</Text>
             </View>
+            <Text style={styles.currentPrice}>
+              Precio actual: {formatMoney(currentPrices.CHICA)}
+            </Text>
             <View style={styles.inputContainer}>
               <Text style={styles.currencyPrefix}>$</Text>
               <TextInput
                 style={styles.input}
-                keyboardType="numeric"
-                value={chicaPrice}
-                onChangeText={(t) => {
-                  setChicaPrice(t);
-                  setSuccessMsg(false);
-                }}
-                placeholder="Ej: 5000"
+                keyboardType="number-pad"
+                value={groupThousands(chicaDigits)}
+                onChangeText={handleChange(setChicaDigits)}
+                placeholder="Ej: 5.000"
                 placeholderTextColor="#999"
+                selectTextOnFocus
+                accessibilityLabel="Precio de botella chica"
               />
             </View>
           </View>
@@ -119,8 +148,12 @@ export default function PreciosScreen() {
           {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
           {successMsg ? (
             <View style={styles.successBox}>
-              <MaterialCommunityIcons name="check-circle" size={24} color={Theme.colors.success} />
-              <Text style={styles.successText}>¡Precios actualizados con éxito!</Text>
+              <MaterialCommunityIcons
+                name="check-circle"
+                size={24}
+                color={Theme.colors.success}
+              />
+              <Text style={styles.successText}>{successMsg}</Text>
             </View>
           ) : null}
 
@@ -173,13 +206,18 @@ const styles = StyleSheet.create({
   fieldHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   fieldLabel: {
     fontSize: Theme.typography.bodyLarge,
     fontWeight: 'bold',
     color: Theme.colors.text,
     marginLeft: 8,
+  },
+  currentPrice: {
+    fontSize: Theme.typography.caption,
+    color: Theme.colors.textMuted,
+    marginBottom: 8,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -224,6 +262,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
     marginLeft: 8,
+    flexShrink: 1,
   },
   saveBtn: {
     marginBottom: 8,

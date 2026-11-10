@@ -3,6 +3,53 @@ import * as SQLite from 'expo-sqlite';
 
 export const DB_NAME = 'licores_stock.db';
 
+// Sabores que se cargan por defecto (idempotente: sólo se agregan los que falten)
+const DEFAULT_FLAVORS = [
+  'Frutilla',
+  'Chocolate',
+  'Dulce de Leche',
+  'Pomelo',
+  'Café',
+  'Limón',
+  'Jabuticaba',
+  'Pitanga',
+  'Guabiroba',
+  'Níspero',
+  'Mora',
+  'Rosella',
+];
+
+function ensureDefaultFlavors(db: SQLite.SQLiteDatabase): void {
+  const now = new Date().toISOString();
+
+  db.withTransactionSync(() => {
+    for (const name of DEFAULT_FLAVORS) {
+      const existing = db.getFirstSync<{ id: number }>(
+        'SELECT id FROM flavors WHERE LOWER(name) = LOWER(?)',
+        name
+      );
+      if (existing) continue;
+
+      const res = db.runSync(
+        'INSERT INTO flavors (name, active, created_at) VALUES (?, 1, ?)',
+        name,
+        now
+      );
+      const flavorId = res.lastInsertRowId;
+
+      // Inicializar stock en 0 para GRANDE y CHICA
+      db.runSync(
+        'INSERT OR IGNORE INTO stock (flavor_id, size, quantity) VALUES (?, "GRANDE", 0)',
+        flavorId
+      );
+      db.runSync(
+        'INSERT OR IGNORE INTO stock (flavor_id, size, quantity) VALUES (?, "CHICA", 0)',
+        flavorId
+      );
+    }
+  });
+}
+
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 
 export function getDB(): SQLite.SQLiteDatabase {
@@ -163,29 +210,14 @@ export function initDatabase(db: SQLite.SQLiteDatabase) {
 
   // Inicializar sabores de muestra si la base está totalmente vacía
   const flavorCount = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM flavors');
-  if (!flavorCount || flavorCount.count === 0) {
-    const defaultFlavors = [
-      'Frutilla',
-      'Chocolate',
-      'Dulce de Leche',
-      'Pomelo',
-      'Café',
-      'Limón',
-    ];
-    const now = new Date().toISOString();
-    for (const name of defaultFlavors) {
-      const res = db.runSync(
-        'INSERT INTO flavors (name, active, created_at) VALUES (?, 1, ?)',
-        name,
-        now
-      );
-      const flavorId = res.lastInsertRowId;
-      // Inicializar stock en 0 para GRANDE y CHICA
-      db.runSync('INSERT INTO stock (flavor_id, size, quantity) VALUES (?, "GRANDE", 0)', flavorId);
-      db.runSync('INSERT INTO stock (flavor_id, size, quantity) VALUES (?, "CHICA", 0)', flavorId);
-    }
+  const wasEmpty = !flavorCount || flavorCount.count === 0;
 
+  // Cargar los sabores por defecto que falten (también en bases ya existentes)
+  ensureDefaultFlavors(db);
+
+  if (wasEmpty) {
     // Inicializar un combo de ejemplo común: "Dúo Chicas" (2 botellas chicas)
+    const now = new Date().toISOString();
     const comboRes = db.runSync(
       'INSERT INTO combos (name, price, active, created_at) VALUES (?, ?, 1, ?)',
       'Dúo Chicas',

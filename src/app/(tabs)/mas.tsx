@@ -1,13 +1,30 @@
 // src/app/(tabs)/mas.tsx
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { BigButton } from '@/components/BigButton';
 import { Card } from '@/components/Card';
+import { PriceService } from '@/services/priceService';
 import { Theme } from '@/theme';
+import { formatMoney } from '@/utils/format';
 
 export default function MasScreen() {
   const router = useRouter();
+  const [prices, setPrices] = useState<{ GRANDE: number; CHICA: number }>({
+    GRANDE: 8000,
+    CHICA: 5000,
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      try {
+        const current = PriceService.getPrices();
+        setPrices({ GRANDE: current.GRANDE, CHICA: current.CHICA });
+      } catch (e) {
+        console.error('Error al cargar precios:', e);
+      }
+    }, [])
+  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -21,7 +38,7 @@ export default function MasScreen() {
       <View style={styles.menuContainer}>
         <BigButton
           label="1. Precios de Botellas"
-          sublabel="Cambiar precio de botella grande y chica"
+          sublabel={`Actual: grande ${formatMoney(prices.GRANDE)} · chica ${formatMoney(prices.CHICA)}`}
           icon="currency-usd"
           variant="primary"
           onPress={() => router.push('/precios')}
